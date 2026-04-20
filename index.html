@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wizualiser</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 12px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            z-index: 100;
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 250px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            border: 1px solid #444;
+            z-index: 100;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 10px;
+            width: 45px;
+        }
+
+        .upload-btn {
+            width: 24px;
+            height: 24px;
+            margin-bottom: 8px;
+            background: #444;
+            color: #fff;
+            border: 1px solid #666;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .upload-btn:hover { background: #666; }
+
+        input[type=range][orient=vertical] {
+            -webkit-appearance: slider-vertical;
+            width: 12px;
+            height: 120px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+
+        span {
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            text-align: center;
+        }
+
+        #fileInput { display: none; }
+
+        h4 { margin: 0 0 10px 0; color: #00ff00; text-transform: uppercase; font-size: 12px; }
+        p { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <canvas id="visualizer"></canvas>
+
+    <div id="controls"></div>
+
+    <div id="instructions">
+        <h4>Instructions</h4>
+        <p>• <b>Sliders:</b> Adjust frequency sensitivity. Lower value = higher sensitivity.</p>
+        <p>• <b>(+) Button:</b> Upload a custom image for that band (1000x1000px recommended).</p>
+        <p>• <b>Refresh:</b> Revert all sliders to baseline values. Uploaded images stay! </p>
+        <p>• <b>Images</b> Up to 5 old images for each slider are stored in the temporary directory. You can find them there!</p>
+        <p>• Preset sprites found on the internet.</p>
+        <p>• <h4>kvas904</h4> </p>
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*">
+
+    <script>
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
+        const controls = document.getElementById('controls');
+        const fileInput = document.getElementById('fileInput');
+
+        let currentTargetBand = '';
+        let lastActiveLayerKey = 'low_1';
+
+        // Визначаємо базовий URL для запитів
+        const BASE_URL = window.location.origin;
+
+        const layers = {
+            low_1: { img: new Image(), active: false, lastChanged: 0, src: 'images/low_1.jpg', base: 8000 },
+            low_2: { img: new Image(), active: false, lastChanged: 0, src: 'images/low_2.jpg', base: 8000 },
+            low_3: { img: new Image(), active: false, lastChanged: 0, src: 'images/low_3.jpg', base: 8000 },
+            high_1: { img: new Image(), active: false, lastChanged: 0, src: 'images/high_1.jpg', base: 10000 },
+            high_2: { img: new Image(), active: false, lastChanged: 0, src: 'images/high_2.jpg', base: 10000 },
+            high_3: { img: new Image(), active: false, lastChanged: 0, src: 'images/high_3.jpg', base: 10000 },
+            beat: { img: new Image(), active: false, lastChanged: 0, src: 'images/beat.jpg', base: 400000 }
+        };
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+
+        Object.keys(layers).forEach(key => {
+            const layer = layers[key];
+            const container = document.createElement('div');
+            container.className = 'slider-container';
+
+            const btn = document.createElement('button');
+            btn.className = 'upload-btn';
+            btn.innerText = '+';
+            btn.onclick = () => {
+                currentTargetBand = key;
+                fileInput.click();
+            };
+
+            const label = document.createElement('span');
+            label.innerText = key.replace('_', ' ');
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.setAttribute('orient', 'vertical');
+            slider.min = 500;
+            slider.max = key === 'beat' ? 1000000 : 30000;
+            slider.value = layer.base;
+            slider.title = slider.value;
+
+            slider.oninput = () => {
+                slider.title = slider.value;
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({"update": {[key]: parseFloat(slider.value)}}));
+                }
+            };
+
+            container.appendChild(btn);
+            container.appendChild(label);
+            container.appendChild(slider);
+            controls.appendChild(container);
+
+            layer.img.src = `${BASE_URL}/${layer.src}?t=${Date.now()}`;
+        });
+
+        fileInput.onchange = async (e) => {
+            if (!e.target.files[0] || !currentTargetBand) return;
+
+            const formData = new FormData();
+            formData.append('file', e.target.files[0]);
+            formData.append('band', currentTargetBand);
+
+            try {
+                const response = await fetch(`${BASE_URL}/upload`, { method: 'POST', body: formData });
+                if (response.ok) {
+                    layers[currentTargetBand].img.src = `${BASE_URL}/images/${currentTargetBand}.jpg?t=${Date.now()}`;
+                }
+            } catch (err) {
+                console.error("Upload failed:", err);
+            }
+        };
+
+        const THRESHOLD = 0.3;
+        const FRAME_DURATION = 100;
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const now = Date.now();
+            let anyActive = false;
+            let maxVal = -1;
+            let currentWinner = lastActiveLayerKey;
+
+            for (let key in layers) {
+                const layer = layers[key];
+                const val = key === 'beat' ? (data.beat ? 1.0 : 0) : (data[key] || 0);
+
+                if (now - layer.lastChanged > FRAME_DURATION) {
+                    layer.active = (val > THRESHOLD);
+                    if (layer.active) {
+                        layer.lastChanged = now;
+                    }
+                }
+
+                if (layer.active) {
+                    anyActive = true;
+                    if (val > maxVal) {
+                        maxVal = val;
+                        currentWinner = key;
+                    }
+                }
+            }
+
+            if (anyActive) {
+                lastActiveLayerKey = currentWinner;
+            }
+        };
+
+        function drawProportionalImage(img) {
+            if (!img.complete || img.naturalWidth === 0) return;
+            const canvasRatio = canvas.width / canvas.height;
+            const imgRatio = img.width / img.height;
+            let dw, dh, ox, oy;
+
+            if (canvasRatio > imgRatio) {
+                dw = canvas.width; dh = canvas.width / imgRatio;
+                ox = 0; oy = (canvas.height - dh) / 2;
+            } else {
+                dw = canvas.height * imgRatio; dh = canvas.height;
+                ox = (canvas.width - dw) / 2; oy = 0;
+            }
+            ctx.drawImage(img, ox, oy, dw, dh);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let displayed = false;
+
+            for (let key in layers) {
+                if (layers[key].active) {
+                    drawProportionalImage(layers[key].img);
+                    displayed = true;
+                }
+            }
+
+            if (!displayed && layers[lastActiveLayerKey].img) {
+                drawProportionalImage(layers[lastActiveLayerKey].img);
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+    </script>
+</body>
+</html>
