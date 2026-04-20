@@ -5,6 +5,16 @@
   Internet access is not needed to run the app. The .exe file can be found in a /dist/main.exe. It has everything needed, including pre-set images (found on the web, no copyright), and can be downloaded and used as a standalone app. But you can pack the .exe yourself of course. I did it via PyInstaller.
    
   The Wizualizer is entirely vibecoded in one evening, as a self-educational project for me. Use it however you want, but be awawre that it's wonky and I hardly understand the code details. Have fun!
+
+  |  | What's planned|
+  |--|---------------|
+  |  | Ability to add more sliders/frames |
+  |  | Fixing the interface: |
+  |  | >> open/close instructions |
+  |  | >> fix excess dot in instructions |
+  |  | Ability to load pre-made packs |
+  |  | Fix the upscaling of the image |
+  |  | Gif support |
   
 -------------------------------------------------------------------------------
   Невеличкий візуалізатор звуку з мікрофонного входу. Звук розподіляється на сім «частотних смуг»: три для високих частот, три для низьких і одна для бітів. Чутливість захоплення висоти звуку можна точно налаштувати за допомогою повзунків. Кожна «частотна смуга» може мати зображення, що є кадром анімації.
